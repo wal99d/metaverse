@@ -1,6 +1,4 @@
-Below is a comprehensive, developer-ready specification for your home automation project:
 
----
 
 ### 1. Overview
 
