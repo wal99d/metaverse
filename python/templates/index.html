@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Vircadia Interface Simulation</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+            background-color: #f0f0f0;
+        }
+        .container {
+            background-color: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            text-align: center;
+        }
+        #led-button {
+            padding: 15px 30px;
+            font-size: 18px;
+            margin: 20px;
+            cursor: pointer;
+            border: none;
+            border-radius: 5px;
+            transition: background-color 0.3s;
+        }
+        #led-button.on {
+            background-color: #4CAF50;
+            color: white;
+        }
+        #led-button.off {
+            background-color: #f44336;
+            color: white;
+        }
+        #weather-display {
+            margin-top: 20px;
+            padding: 15px;
+            background-color: #e8f5e9;
+            border-radius: 5px;
+            font-size: 16px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Vircadia Interface Simulation</h1>
+        <button id="led-button" class="off">LED OFF</button>
+        <div id="weather-display">Loading weather data...</div>
+    </div>
+
+    <script>
+        const button = document.getElementById('led-button');
+        const weatherDisplay = document.getElementById('weather-display');
+        let isLedOn = false;
+
+        async function toggleLED() {
+            try {
+                const state = isLedOn ? 'off' : 'on';
+                const response = await fetch('/api/led', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ state })
+                });
+                
+                if (response.ok) {
+                    isLedOn = !isLedOn;
+                    button.textContent = `LED ${state.toUpperCase()}`;
+                    button.className = state;
+                } else {
+                    const error = await response.json();
+                    alert(`Error: ${error.error}`);
+                }
+            } catch (error) {
+                alert('Failed to control LED');
+            }
+        }
+
+        async function updateWeather() {
+            try {
+                const response = await fetch('/api/weather');
+                const data = await response.json();
+                if (data.forecast) {
+                    weatherDisplay.textContent = data.forecast;
+                } else {
+                    weatherDisplay.textContent = 'Weather data unavailable';
+                }
+            } catch (error) {
+                weatherDisplay.textContent = 'Failed to fetch weather data';
+            }
+        }
+
+        button.addEventListener('click', toggleLED);
+        
+        // Update weather initially and every 10 minutes
+        updateWeather();
+        setInterval(updateWeather, 600000);
+    </script>
+</body>
+</html>
