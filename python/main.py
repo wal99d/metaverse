@@ -6,6 +6,8 @@ import atexit
 import signal
 import sys
 from app import app, arduino, weather
+from flask import Flask, jsonify
+import socket
 
 class SystemManager:
     def __init__(self):
@@ -25,7 +27,7 @@ class SystemManager:
             'interval',
             minutes=10,
             id='weather_update',
-            next_run_time=None  # Don't run immediately
+            next_run_time=None
         )
 
         # Initial weather update
@@ -45,51 +47,43 @@ class SystemManager:
     def cleanup(self, signum=None, frame=None):
         """Clean up system resources."""
         print("\nShutting down system...")
-        
-        # Stop scheduler
         self.scheduler.shutdown()
         
-        # Disconnect Arduino
         if arduino.serial:
-            arduino.led_off()  # Turn off LED before disconnecting
+            arduino.led_off()
             arduino.disconnect()
         
-        # Stop Flask (if running in main thread)
-        if not signum:  # Normal shutdown
+        if not signum:
             sys.exit(0)
-        else:  # Signal handler
+        else:
             self.is_running = False
-
-def create_app(system_manager):
-    """Configure Flask app with system manager."""
-    
-    # Override weather endpoint to use cached forecast
-    @app.route('/api/weather')
-    def get_weather():
-        return {'forecast': system_manager.latest_forecast}
-    
-    return app
 
 if __name__ == '__main__':
     # Initialize system manager
     system_manager = SystemManager()
     
-    # Set up signal handlers for graceful shutdown
+    # Set up signal handlers
     signal.signal(signal.SIGINT, system_manager.cleanup)
     signal.signal(signal.SIGTERM, system_manager.cleanup)
     
-    # Register cleanup on normal exit
+    # Register cleanup
     atexit.register(system_manager.cleanup)
     
     # Initialize system
     system_manager.initialize()
     
-    # Configure and start Flask app
-    app = create_app(system_manager)
-    
     # Start Flask server
-    try:
-        app.run(host='0.0.0.0', port=5000)
-    except Exception as e:
-        print(f"Error starting Flask server: {e}")
-        system_manager.cleanup()
+    ports = [5001, 5002, 5003, 5000]
+    
+    for port in ports:
+        try:
+            app.run(host='0.0.0.0', port=port)
+            break
+        except socket.error as e:
+            print(f"Port {port} is in use, trying next port...")
+            if port == ports[-1]:
+                print("No available ports found. Please free up a port and try again.")
+                system_manager.cleanup()
+        except Exception as e:
+            print(f"Error starting Flask server: {e}")
+            system_manager.cleanup()

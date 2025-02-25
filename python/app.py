@@ -7,7 +7,7 @@ from threading import Lock
 app = Flask(__name__)
 
 # Initialize controllers with thread safety
-arduino = ArduinoController('COM3')  # Adjust port as needed
+arduino = ArduinoController('/dev/cu.usbmodem1101')  # Adjust port as needed
 weather = WeatherService()
 arduino_lock = Lock()
 

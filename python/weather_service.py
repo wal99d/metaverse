@@ -1,7 +1,6 @@
 import requests
 from datetime import datetime
 from typing import Optional, Dict, Any
-import os
 from dataclasses import dataclass
 
 @dataclass
@@ -12,34 +11,32 @@ class WeatherForecast:
     timestamp: datetime
 
 class WeatherService:
-    def __init__(self, api_key: str = None):
-        """Initialize WeatherService with OpenWeatherMap API key.
-        
-        Args:
-            api_key: OpenWeatherMap API key. If None, tries to read from environment variable.
-        """
-        self.api_key = api_key or os.getenv('OPENWEATHER_API_KEY')
-        if not self.api_key:
-            raise ValueError("API key is required. Set OPENWEATHER_API_KEY environment variable or pass it directly.")
-        
-        self.base_url = "https://api.openweathermap.org/data/2.5/forecast"
+    def __init__(self):
+        """Initialize WeatherService using Open-Meteo API."""
+        self.base_url = "https://api.open-meteo.com/v1/forecast"
         self.last_forecast: Optional[WeatherForecast] = None
 
     def get_forecast(self, city: str) -> str:
-        """Get weather forecast for specified city.
-        
-        Args:
-            city: City name (e.g., 'London,UK')
-            
-        Returns:
-            str: Formatted weather forecast string
-        """
+        """Get weather forecast for specified city."""
         try:
+            # First, get coordinates for the city using Nominatim
+            geocoding_url = f"https://nominatim.openstreetmap.org/search?q={city}&format=json&limit=1"
+            geo_response = requests.get(geocoding_url, headers={'User-Agent': 'WeatherService/1.0'})
+            geo_response.raise_for_status()
+            
+            location_data = geo_response.json()
+            if not location_data:
+                raise ValueError(f"Could not find coordinates for {city}")
+            
+            lat = location_data[0]['lat']
+            lon = location_data[0]['lon']
+            
+            # Get weather forecast using coordinates
             params = {
-                'q': city,
-                'appid': self.api_key,
-                'units': 'metric',
-                'cnt': 4  # Limit to next few hours
+                'latitude': lat,
+                'longitude': lon,
+                'hourly': 'temperature_2m,weathercode',
+                'forecast_days': 1
             }
             
             response = requests.get(self.base_url, params=params)
@@ -59,19 +56,47 @@ class WeatherService:
 
     def _parse_forecast(self, data: Dict[str, Any]) -> WeatherForecast:
         """Parse JSON response into WeatherForecast object."""
-        if not data.get('list'):
+        if not data.get('hourly'):
             raise ValueError("Invalid forecast data")
             
-        forecasts = data['list']
-        temps = [item['main']['temp'] for item in forecasts]
-        conditions = [item['weather'][0]['description'] for item in forecasts]
+        temps = data['hourly']['temperature_2m'][:24]  # Next 24 hours
+        codes = data['hourly']['weathercode'][:24]
+        
+        # Convert weather code to condition text
+        condition = self._get_condition_from_code(max(set(codes), key=codes.count))
         
         return WeatherForecast(
             temp_min=min(temps),
             temp_max=max(temps),
-            condition=max(set(conditions), key=conditions.count),  # most common condition
+            condition=condition,
             timestamp=datetime.now()
         )
+
+    def _get_condition_from_code(self, code: int) -> str:
+        """Convert Open-Meteo weather code to condition text."""
+        conditions = {
+            0: "clear sky",
+            1: "mainly clear",
+            2: "partly cloudy",
+            3: "overcast",
+            45: "foggy",
+            48: "depositing rime fog",
+            51: "light drizzle",
+            53: "moderate drizzle",
+            55: "dense drizzle",
+            61: "slight rain",
+            63: "moderate rain",
+            65: "heavy rain",
+            71: "slight snow",
+            73: "moderate snow",
+            75: "heavy snow",
+            77: "snow grains",
+            80: "slight rain showers",
+            81: "moderate rain showers",
+            82: "violent rain showers",
+            95: "thunderstorm"
+        }
+        return conditions.get(code, "unknown")
 
     def _format_forecast(self, forecast: WeatherForecast) -> str:
         """Format WeatherForecast into display string."""
